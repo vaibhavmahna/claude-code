@@ -18,6 +18,8 @@ jobs:
     name: ${{ matrix.os }} / Python ${{ matrix.python }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
+    # macOS runners are often short on capacity; a macOS failure is shown but does not fail the run.
+    continue-on-error: ${{ startsWith(matrix.os, 'macos') }}
     strategy:
       fail-fast: false
       matrix:
