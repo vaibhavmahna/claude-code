@@ -172,7 +172,7 @@ task: <one line>
 
 **Respawn.** A PostToolUse hook on the `Agent` tool detects `STATUS: HANDOFF <path>` in a subagent's result and injects `[harness:handoff] ...`. The parent must then spawn a **fresh agent of the same type** with this prompt: `Resume from handoff <path>. Read it first, then only the KG nodes/pointers it lists. Continue from "Next first step".`
 
-**Main session:** at LIMIT, write a handoff, then delegate the remainder to a fresh `orchestrator` subagent with that handoff. If that isn't possible, tell the user to run `/clear` then `/resume-handoff <path>`. Auto-compact at 50% (`CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=50`) is the backstop.
+**Main session:** at LIMIT, write a handoff, then delegate the remainder to a fresh `orchestrator` subagent with that handoff. If that isn't possible, tell the user to run `/clear` then `/resume-handoff <path>`. Auto-compact at 85% (`CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=85`) is the backstop.
 
 ## 📋 Agent return block (every agent ends with this)
 
