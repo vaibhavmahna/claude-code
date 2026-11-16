@@ -653,7 +653,11 @@ def main(argv=None) -> int:
     if root in ("/", os.path.expanduser("~")) or os.path.dirname(root) == root:
         print(f"Refusing to install into {root}; point at a project directory.", file=sys.stderr)
         return 2
-    if os.path.commonpath([root, HERE]) == HERE:
+    try:
+        inside_harness = os.path.commonpath([root, HERE]) == HERE
+    except ValueError:  # Windows: paths on different drives share no common path
+        inside_harness = False
+    if inside_harness:
         print("Refusing to install into the harness repo itself.", file=sys.stderr)
         return 2
     if args.check:
