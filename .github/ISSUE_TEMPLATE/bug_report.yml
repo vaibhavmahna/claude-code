@@ -1,0 +1,105 @@
+name: Bug report
+description: Something in the installer, a hook, an agent or a tool does not work as documented.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Do not paste secrets, tokens, API keys, passwords or personal data (PII) anywhere in this issue.**
+        Replace them with obviously fake placeholders such as `<API_KEY>` or `user@example.com` before posting.
+
+        Found a security problem, such as a guard that can be bypassed? Do not open a public issue.
+        Use the private "Report a security vulnerability" link on the new-issue page instead.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: Describe the bug. Include the exact message or decision you saw.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The smallest sequence of commands or prompts that triggers the bug.
+      placeholder: |
+        1. python3 install.py ~/projects/demo
+        2. Start Claude Code in ~/projects/demo
+        3. Ask: ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What you expected to happen instead.
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: macOS 15.1, Ubuntu 24.04, WSL2 Ubuntu 22.04
+    validations:
+      required: true
+
+  - type: input
+    id: python-version
+    attributes:
+      label: Python version
+      description: Output of `python3 --version`.
+      placeholder: Python 3.12.4
+    validations:
+      required: true
+
+  - type: input
+    id: claude-version
+    attributes:
+      label: Claude Code version
+      description: Output of `claude --version`.
+    validations:
+      required: true
+
+  - type: input
+    id: harness-version
+    attributes:
+      label: Harness version
+      description: The `version` field in your project's `.claude/harness.json`.
+      placeholder: 0.2.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Hook, agent or component involved
+      options:
+        - guard_bash
+        - guard_read
+        - guard_write
+        - guard_prompt
+        - guard_egress
+        - Other hook
+        - Agent (name it in "What happened")
+        - Skill
+        - Installer (install.py)
+        - Knowledge graph (kg.py)
+        - Doctor or other tool
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or output
+      description: |
+        Relevant output, for example from `python3 .claude/tools/doctor.py`.
+        Check it for secrets, tokens, keys and personal data before pasting, and replace them with placeholders.
+      render: shell
+    validations:
+      required: false

@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  # Pushes run on main only; other branches are tested through their pull request, not twice.
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.9", "3.13"]
+        # GitHub has no Python 3.9 build for Ubuntu 26.04 (ubuntu-latest), so 3.9 runs on 24.04.
+        exclude:
+          - os: ubuntu-latest
+            python: "3.9"
+        include:
+          - os: ubuntu-24.04
+            python: "3.9"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Unit tests
+        run: python -m unittest discover -s tests
+
+      - name: Doc format
+        run: python template/claude/tools/doc_format.py check README.md CONTRIBUTING.md SECURITY.md CODE_OF_CONDUCT.md docs/*.md evals/README.md
+
+      - name: SVG lint
+        run: python template/claude/tools/svg_lint.py docs/diagrams/*.svg
+
+      - name: Installer smoke test
+        run: |
+          dir="$(mktemp -d)"
+          git init -q "$dir"
+          python install.py DIR="$dir"
+          python "$dir/.claude/tools/doctor.py" --root "$dir"
+          python install.py DIR="$dir" --check

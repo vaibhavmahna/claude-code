@@ -1,0 +1,35 @@
+# Eval runs: one file per run, with costs and machine paths. The numbers worth keeping go in evals/README.md.
+evals/results/
+
+# Internal showcase deck and its notes; local only, not part of the public project
+presentation/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# OS and editors
+.DS_Store
+.vscode/
+.idea/
+
+# Personal Claude Code files
+.claude/settings.local.json
+CLAUDE.local.md
+
+# Secrets never belong in this repo; tests and evals build fake ones at runtime
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Backups the installer writes next to files it replaces
+*.bak-*

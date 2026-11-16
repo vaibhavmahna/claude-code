@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 840 784" role="img" aria-labelledby="diagram-title diagram-desc">
+  <title id="diagram-title">Tool call flow through the harness hooks</title>
+  <desc id="diagram-desc">Claude requests a tool call. PreToolUse guards (guard_bash.py, guard_read.py, guard_write.py, guard_egress.py) can deny it, which blocks the call and returns the reason to Claude, or allow it; guard_bash.py can also ask the user. Permission rules in settings.json then deny, ask or allow the call. An allowed call runs the tool, then PostToolUse hooks (redact_output.py, kg_hooks.py, handoff_watch.py, context_guard.py, doc_check.py) process the output and the result returns to Claude.</desc>
+  <style>
+    /* theme: light (fixed) */
+    :root {
+      --bg: #FAFAFA;
+      --fg: #0F172A;
+      --muted: #475569;
+      --edge: #64748B;
+      --err: #DC2626;
+      --svc-fill: #DBEAFE;  --svc-stroke: #2563EB;
+      --data-fill: #DCFCE7; --data-stroke: #16A34A;
+      --ext-fill: #F1F5F9;  --ext-stroke: #64748B;
+      --user-fill: #FEF3C7; --user-stroke: #D97706;
+      --err-fill: #FEE2E2;  --err-stroke: #DC2626;
+      --grid: #E5E5E5;
+    }
+    svg { color: var(--edge); }
+    text { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; dominant-baseline: middle; }
+    .bg { fill: var(--bg); }
+    .title { font-size: 16px; font-weight: 700; fill: var(--fg); }
+    .label { font-size: 14px; font-weight: 600; fill: var(--fg); }
+    .sub { font-size: 12px; fill: var(--muted); }
+    .sub-err { font-size: 12px; fill: var(--err); }
+    .box { stroke-width: 1.5px; }
+    .user { fill: var(--user-fill); stroke: var(--user-stroke); }
+    .svc  { fill: var(--svc-fill);  stroke: var(--svc-stroke); }
+    .data { fill: var(--data-fill); stroke: var(--data-stroke); }
+    .ext  { fill: var(--ext-fill);  stroke: var(--ext-stroke); stroke-dasharray: 4 4; }
+    .err  { fill: var(--err-fill);  stroke: var(--err-stroke); }
+    .edge { fill: none; stroke: currentColor; stroke-width: 1.5px; }
+    .edge-secondary { stroke-dasharray: 4 4; }
+    .edge-err { stroke: var(--err); }
+  </style>
+  <defs>
+    <!-- userSpaceOnUse + refX at the tip: the arrow tip lands exactly on the target border -->
+    <marker id="arrow" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+      <path d="M0 0 L8 4 L0 8 z" fill="currentColor"/>
+    </marker>
+    <marker id="arrow-err" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+      <path d="M0 0 L8 4 L0 8 z" fill="var(--err)"/>
+    </marker>
+    <!-- Optional blueprint grid: set the second background rect's fill to url(#grid) to use it -->
+    <pattern id="grid" width="16" height="16" patternUnits="userSpaceOnUse">
+      <path d="M16 0 H0 V16" fill="none" stroke="var(--grid)" stroke-width="0.5"/>
+    </pattern>
+  </defs>
+
+  <!--
+    Layout (8px grid). Outer margin 24 on all sides. Every box 288 wide.
+    Main column x=88 (centre 232). Side column x=472 (centre 616), 96px gap. Gaps between stacked boxes 56.
+    Box rows: Claude y=88 h64, guards y=208 h112, rules y=376 h80 (same row as blocked), tool y=512 h64, post y=632 h112.
+    Text lines sit 24px from the top, then every 16px, so the last line is 24px from the bottom.
+    Return lanes at x=24 (result) and x=816 (deny + reason), both 24px from the page edge.
+  -->
+  <rect class="bg" x="0" y="0" width="840" height="784"/>
+
+  <!-- Legend: fixed 176px slots, swatch 16x16, label 24px right of the swatch -->
+  <rect class="box user" x="24" y="24" width="16" height="16" rx="4"/>
+  <text class="sub" x="48" y="32">actor</text>
+  <rect class="box svc" x="200" y="24" width="16" height="16" rx="4"/>
+  <text class="sub" x="224" y="32">harness hook</text>
+  <rect class="box ext" x="376" y="24" width="16" height="16" rx="4"/>
+  <text class="sub" x="400" y="32">Claude Code built-in</text>
+  <rect class="box err" x="552" y="24" width="16" height="16" rx="4"/>
+  <text class="sub" x="576" y="32">blocked</text>
+
+  <!-- Claude (actor) -->
+  <rect class="box user" x="88" y="88" width="288" height="64" rx="8"/>
+  <text class="label" x="232" y="112" text-anchor="middle">Claude</text>
+  <text class="sub" x="232" y="128" text-anchor="middle">requests a tool call</text>
+
+  <!-- PreToolUse guards (hook scripts) -->
+  <rect class="box svc" x="88" y="208" width="288" height="112" rx="8"/>
+  <text class="label" x="232" y="232" text-anchor="middle">PreToolUse guards</text>
+  <text class="sub" x="232" y="248" text-anchor="middle">guard_bash.py: Bash, commit gate</text>
+  <text class="sub" x="232" y="264" text-anchor="middle">guard_read.py: Read and Grep calls</text>
+  <text class="sub" x="232" y="280" text-anchor="middle">guard_write.py: file edits</text>
+  <text class="sub" x="232" y="296" text-anchor="middle">guard_egress.py: web and MCP calls</text>
+
+  <!-- Permission rules (built-in) -->
+  <rect class="box ext" x="88" y="376" width="288" height="80" rx="8"/>
+  <text class="label" x="232" y="400" text-anchor="middle">Permission rules</text>
+  <text class="sub" x="232" y="416" text-anchor="middle">settings.json: deny, ask, allow</text>
+  <text class="sub" x="232" y="432" text-anchor="middle">ask means the user confirms</text>
+
+  <!-- Call blocked (outcome), same row as the permission rules -->
+  <rect class="box err" x="472" y="376" width="288" height="80" rx="8"/>
+  <text class="label" x="616" y="400" text-anchor="middle">Call blocked</text>
+  <text class="sub" x="616" y="416" text-anchor="middle">the tool does not run</text>
+  <text class="sub" x="616" y="432" text-anchor="middle">the reason goes back to Claude</text>
+
+  <!-- Tool (built-in) -->
+  <rect class="box ext" x="88" y="512" width="288" height="64" rx="8"/>
+  <text class="label" x="232" y="536" text-anchor="middle">Tool runs</text>
+  <text class="sub" x="232" y="552" text-anchor="middle">Claude Code executes the call</text>
+
+  <!-- PostToolUse hooks (hook scripts) -->
+  <rect class="box svc" x="88" y="632" width="288" height="128" rx="8"/>
+  <text class="label" x="232" y="656" text-anchor="middle">PostToolUse hooks</text>
+  <text class="sub" x="232" y="672" text-anchor="middle">redact_output.py: masks secrets</text>
+  <text class="sub" x="232" y="688" text-anchor="middle">kg_hooks.py: records edited files</text>
+  <text class="sub" x="232" y="704" text-anchor="middle">handoff_watch, guard_compliance.py</text>
+  <text class="sub" x="232" y="720" text-anchor="middle">context_guard.py: context budget</text>
+  <text class="sub" x="232" y="736" text-anchor="middle">doc_check.py: doc format hint</text>
+
+  <!-- Main path: labels 12px right of each vertical line, centred on the 56px gap -->
+  <path class="edge" d="M232 152 V208" marker-end="url(#arrow)"/>
+  <text class="sub" x="244" y="180">tool call</text>
+  <path class="edge" d="M232 320 V376" marker-end="url(#arrow)"/>
+  <text class="sub" x="244" y="348">allow, or ask (Bash only)</text>
+  <path class="edge" d="M232 456 V512" marker-end="url(#arrow)"/>
+  <text class="sub" x="244" y="484">allow</text>
+  <path class="edge" d="M232 576 V632" marker-end="url(#arrow)"/>
+  <text class="sub" x="244" y="604">output</text>
+
+  <!-- Deny path: guards and rules both end in the blocked box; labels 16px above the line, centred on the gap -->
+  <path class="edge edge-err" d="M376 264 H616 V376" marker-end="url(#arrow-err)"/>
+  <text class="sub-err" x="424" y="248" text-anchor="middle">deny</text>
+  <path class="edge edge-err" d="M376 416 H472" marker-end="url(#arrow-err)"/>
+  <text class="sub-err" x="424" y="400" text-anchor="middle">deny</text>
+  <path class="edge edge-err" d="M760 416 H816 V120 H376" marker-end="url(#arrow-err)"/>
+  <text class="sub-err" x="596" y="104" text-anchor="middle">deny + reason</text>
+
+  <!-- Result path back to Claude -->
+  <path class="edge" d="M88 696 H24 V120 H88" marker-end="url(#arrow)"/>
+  <text class="sub" x="56" y="680" text-anchor="middle">result</text>
+</svg>
