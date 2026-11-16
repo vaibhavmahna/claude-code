@@ -373,7 +373,9 @@ def install(root: str, args) -> int:
     conflicts = [c for c in scalar_conflicts(base, fragment) if c != "$schema"]
     merged = merge(base, fragment)
     merged_txt = json.dumps(merged, indent=2) + "\n"
-    if merged_txt != (existing_txt or ""):
+    # Compare parsed JSON, not text: removing and re-adding the fragment can reorder keys,
+    # which would otherwise rewrite an unchanged file and leave a needless backup on every run.
+    if merged != existing or not existing_txt:
         if existing_txt:
             ops.backup(SETTINGS)
         ops.write(SETTINGS, merged_txt.encode(), "merge" if existing_txt else "create")
