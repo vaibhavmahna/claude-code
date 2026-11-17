@@ -51,7 +51,7 @@ The installer is plain Python with no dependencies. It merges with any Claude Co
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code), tested with 2.1.310
 - Python 3.9 or newer, available as `python3`. The installer, hooks and tools use only the standard library: no pip, node or jq.
 - macOS or Linux. CI tests both.
-- **Windows:** run Claude Code inside [WSL2](https://learn.microsoft.com/windows/wsl/install), a dev container or a Codespace, with the project in the Linux filesystem. Native Windows is not supported: the guards only inspect Unix shell commands, so PowerShell commands would run unchecked.
+- **Windows:** run Claude Code inside [WSL2](https://learn.microsoft.com/windows/wsl/install), a dev container or a Codespace, with the project in the Linux filesystem. On native Windows the PowerShell tool goes through the same command guard and output masking, but the guard reads commands with shell rules, so unusual PowerShell syntax is checked less thoroughly than Bash.
 - Git is recommended. The knowledge graph uses commit hashes to spot stale entries, and falls back to file times without it.
 
 ## 🚀 Quick start

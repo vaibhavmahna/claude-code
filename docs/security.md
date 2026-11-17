@@ -33,10 +33,12 @@ How one tool call passes through the hooks:
 **Detection rules:**
 - **Secrets:**
   - private keys (the whole block, body included)
-  - AWS, GitHub, GitLab, Slack, Stripe, Google, Anthropic, OpenAI, npm and SendGrid keys
+  - AWS, GitHub, GitLab, Slack, Stripe, Google, Anthropic, OpenAI, npm, SendGrid, PyPI, Twilio, Mailgun, Grafana and age keys
+  - Azure storage account keys, SAS tokens and Entra ID (AD) client secrets
+  - HashiCorp Vault and Terraform Cloud tokens, Docker registry auth, kubeconfig keys, `Bearer` tokens
   - JWTs
-  - credentials inside connection strings
-  - high-entropy `password`/`token`/`api_key` assignments
+  - credentials inside connection strings, including SQL Server, ADO.NET and JDBC `Password=` forms
+  - high-entropy `password`/`token`/`api_key`/`signing_key`/`*_PAT` assignments, quoted, in dotenv form or as unquoted YAML
 - **PII:**
   - emails and phone numbers: block on web and MCP calls, and locally only in bulk (20 or more distinct values in one text, `scan.pii_bulk_threshold`); a single contributor address passes
   - US SSNs and Canadian SINs (Luhn-checked)

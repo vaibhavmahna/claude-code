@@ -131,6 +131,58 @@ class TestBalance(unittest.TestCase):
         "\n".join(f"P{i},person{i}@corp-mail.io" for i in range(25)),          # a customer export
     ]
 
+    # Cloud / IaC formats. Values are assembled at runtime so no literal secret lives in the repo.
+    _R = "q8Zr2Lm9Xc4Vb7Nn1Kd5Tp3Ws6Yh0GfRt2Ws9Yb6Hd3Kf5JgZq81mVx0Lp4Nc7"
+    _B64 = "kH3n" + "Qz8+Lw2/Rt5Yp9Vb1Xc4Mn7Ka6Jd0Fs3Gh8Ue2Wi5Ox9Py1Tz4Ql7Ar0Sb3Cv6Dm9En2Fo5Gp8Hq1Ir4Js7Kt0Lu3Mv6Nw9OxPy=="
+    MUST_BLOCK_CLOUD = [
+        "SIGNING_KEY=mi2gmlbs0nlpJ96mJAe7/RqZ4xT8vB1c",
+        "export ENCRYPTION_KEY=Zq81mVx0Lp4Nc7Rt2Ws9Yb6Hd3Kf5Jg",
+        '{"hmacKey": "Rt2Ws9Yb6Hd3Kf5JgZq81mVx0Lp4Nc7"}',
+        "DefaultEndpointsProtocol=https;AccountName=st01;AccountKey=" + _B64 + ";EndpointSuffix=core.windows.net",
+        "https://st.blob.core.windows.net/c?sv=2022-11-02&sp=r&sig=" + "aB3dE6gH9jK2mN5pQ8sT1vW4yZ7cF0iL3oR6uX9%3D",
+        "client secret " + "Ab1" + "8Q~" + _R[:32],
+        "AZURE_DEVOPS_EXT_PAT=" + "a2b3c4d5e6f7g2h3i4j5k6l7m2n3o4p5q6r7s2t3u4v5w6x7y2z3",
+        "Server=tcp:sql01.database.windows.net;Database=app;User Id=admin;Password=" + "Q8zr!Lm9Xc4V;",
+        "jdbc:postgresql://db:5432/app?user=app&password=" + "Q8zrLm9Xc4Vb7",
+        "Authorization: Bearer " + _R[:40],
+        "password: " + "Q8zrLm9Xc4Vb7Nn",
+        "  secretKey: " + _R[:32],
+        "token: " + _R[:48],
+        "VAULT_TOKEN=" + "hvs." + _R + _R[:20],
+        "q8Zr2Lm9Xc4Vb7" + ".atlasv1." + _R + "abcdefgh",
+        '{"auths":{"reg.io":{"auth":"' + "Y2k6UThack0yWGM0VmI3Tm4xS2Q1" + '"}}}',
+        "client-key-data: " + _B64,
+        "$p = ConvertTo-SecureString '" + "Q8zr!Lm9Xc4V" + "' -AsPlainText -Force",
+    ]
+    MUST_NOT_BLOCK_CLOUD = [
+        "password: ${DB_PASSWORD}", "token: {{ .Values.apiToken }}", "secretName: my-app-tls-certificate-2024",
+        "password_policy: strict-uppercase-digits", "token_ttl: 3600", "PATH=/usr/local/bin:/usr/bin:/bin:/sbin",
+        "mkdir -p src/components/navigation/sidebar", "Authorization: Bearer <your-token-here>",
+        "Authorization: Bearer $TOKEN", "the signing key rotates every month",
+        "valueFrom:\n  secretKeyRef:\n    name: db\n    key: password", "client_secret = var.client_secret",
+        "AccountKey=<storage-account-key>", "docker run -p 8080:80 nginx",
+    ]
+
+    def test_cloud_secrets_block(self):
+        for text in self.MUST_BLOCK_CLOUD:
+            with self.subTest(text[:30]):
+                self.assertTrue(self.local(text), text[:30])
+
+    def test_cloud_config_passes(self):
+        for text in self.MUST_NOT_BLOCK_CLOUD:
+            with self.subTest(text[:30]):
+                self.assertEqual([f.detector for f in self.local(text)], [])
+
+    def test_infra_credential_files_are_sensitive(self):
+        for p in ("terraform.tfvars", "envs/prod/prod.auto.tfvars", "kubeconfig", "clusters/aks.kubeconfig",
+                  ".terraformrc", ".vault-token", "local.settings.json", "sa-key.json", "azure-credentials.json",
+                  ".dockerconfigjson", "client.ovpn", "values-secrets.yaml", "/proc/self/environ"):
+            with self.subTest(p):
+                self.assertTrue(sensitive_path_reason(p))
+        for p in ("terraform.tfvars.example", "main.tf", "variables.tf", "values.yaml", "appsettings.json", "kube.md"):
+            with self.subTest(p):
+                self.assertIsNone(sensitive_path_reason(p))
+
     def local(self, text):
         return scan_local(text, Allowlist(), DEFAULT_CONFIG["scan"])
 

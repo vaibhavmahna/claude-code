@@ -202,6 +202,9 @@ NEXT: <recommended next step or agent>
 - `secret.github_token`, `secret.gitlab_token`
 - `secret.slack_token`, `secret.slack_webhook`
 - `secret.stripe_key`, `secret.google_api_key`, `secret.anthropic_key`, `secret.openai_key`, `secret.npm_token`, `secret.sendgrid_key`
+- `secret.azure_storage_key`, `secret.azure_sas_token`, `secret.azure_client_secret`
+- `secret.vault_token`, `secret.terraform_cloud_token`, `secret.docker_auth`, `secret.bearer_token`
+- `secret.pypi_token`, `secret.twilio_key`, `secret.mailgun_key`, `secret.age_key`, `secret.grafana_token`
 - `secret.jwt`, `secret.connection_string`, `secret.generic_assignment`
 - `pii.email`, `pii.phone`, `pii.ssn`, `pii.sin`, `pii.credit_card`, `pii.iban`
 

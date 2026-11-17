@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+### Added
+
+- The PowerShell tool now goes through the command guard and output masking. PowerShell rules: `Remove-Item` and other deletes, `Get-ChildItem env:`, printing secret `$env:` variables, `Invoke-Expression`, `-Verb RunAs`, `Remove-Az*` and Az cmdlets that read keys or tokens are denied; `New-AzRoleAssignment` and `Set-ExecutionPolicy` ask.
+- Secret detection for Azure storage keys, SAS tokens and Entra ID client secrets, Azure DevOps PATs, SQL Server and JDBC passwords, `Bearer` tokens, Vault and Terraform Cloud tokens, Docker registry auth, kubeconfig keys, unquoted YAML secrets, `signing`/`encryption`/`hmac` keys, `ConvertTo-SecureString -AsPlainText`, and PyPI, Twilio, Mailgun, Grafana and age keys.
+- Sensitive files: `*.tfvars`, `.terraformrc`, Terraform Cloud credentials, kubeconfig files, `.vault-token`, Docker auth files, `local.settings.json`, `*-key.json`, `*-credentials.json`, `*-secrets.yaml`, `.ovpn`, `.s3cfg`, `.boto` and `/proc/*/environ`.
+- Commands that print secrets or mint credentials are denied: `terraform output -raw/-json`, `terraform show -json`, `terraform state pull`, `kubectl describe secret`, `kubectl exec … env`, `kubectl create token`, `helm get values/all/manifest`, Azure key, connection-string, publishing-profile and service-principal credential commands, `az aks get-credentials --admin`, `aws iam create-access-key`, `aws ecr get-login-password`, `gcloud … keys create` and `vault token`. Role assignments, `kubectl exec`, `helm install/upgrade`, `terraform force-unlock` and `workspace delete` ask.
+
+### Fixed
+
+- The installer no longer crashes when the project is on a different Windows drive, and no longer rewrites an unchanged `settings.json`.
+
 ## [1.0.0] - 2026-11-15
 
 ### Added
