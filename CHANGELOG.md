@@ -13,8 +13,14 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 - Sensitive files: `*.tfvars`, `.terraformrc`, Terraform Cloud credentials, kubeconfig files, `.vault-token`, Docker auth files, `local.settings.json`, `*-key.json`, `*-credentials.json`, `*-secrets.yaml`, `.ovpn`, `.s3cfg`, `.boto` and `/proc/*/environ`.
 - Commands that print secrets or mint credentials are denied: `terraform output -raw/-json`, `terraform show -json`, `terraform state pull`, `kubectl describe secret`, `kubectl exec … env`, `kubectl create token`, `helm get values/all/manifest`, Azure key, connection-string, publishing-profile and service-principal credential commands, `az aks get-credentials --admin`, `aws iam create-access-key`, `aws ecr get-login-password`, `gcloud … keys create` and `vault token`. Role assignments, `kubectl exec`, `helm install/upgrade`, `terraform force-unlock` and `workspace delete` ask.
 
+- Prompts get two extra checks: a secret stated in a sentence ("the signing key is X", "set SIGNING_KEY to X", "the db password is X") and a bare generated value pasted on its own (`openssl rand -base64 32`). They apply to prompts only, so file scans stay quiet.
+- Credentials in URL query strings (`?api_key=`, `&access_token=`, `&password=`) block in web fetches, commands and files.
+- More PowerShell and command-line rules: a bare `$env:SECRET` expression, `[Environment]::GetEnvironmentVariables()`, `[IO.File]::ReadAllText` on a sensitive file, `cmd /c set`, PowerShell and shell history files, `GetNetworkCredential()` and secure-string-to-text calls, `mysql -p<password>`, `sshpass -p`, `docker compose config` and `docker exec … env` are denied; `git config core.hooksPath` is denied (it asked before); `docker inspect` asks.
+
 ### Fixed
 
+- `NAME=value` secrets were only caught at the start of a line, so `use this key SIGNING_KEY=…` or `--set secretEnv.SIGNING_KEY=…` got through. They are now caught anywhere in a line.
+- PowerShell cmdlets that write files (`Set-Content`, `Add-Content`, `Out-File`, `New-Item`, `Copy-Item`, `Move-Item` and their aliases) could change harness files and `.git/hooks`. They are now denied like `cp`, `mv` and `>`.
 - The installer no longer crashes when the project is on a different Windows drive, and no longer rewrites an unchanged `settings.json`.
 
 ## [1.0.0] - 2026-11-15

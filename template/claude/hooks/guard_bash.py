@@ -62,6 +62,38 @@ PATH_ONLY_CMDS = {"ls", "test", "[", "[[", "stat", "touch", "mkdir", "realpath",
 WRITER_CMDS = {"tee", "mv", "cp", "rm", "chmod", "chown", "ln", "truncate", "dd", "install", "patch",
                "rsync", "sed", "perl", "awk", "python", "python3", "node", "ruby", "unlink", "shred",
                "tar", "unzip", "cpio", "touch", "mkdir"}
+# PowerShell cmdlets and aliases that create, change or remove files (matched lower-case).
+PS_WRITERS = {"set-content", "sc", "add-content", "ac", "out-file", "new-item", "ni", "copy-item", "copy", "cpi",
+              "move-item", "move", "mi", "rename-item", "ren", "rni", "remove-item", "ri", "del", "erase",
+              "clear-content", "clc", "set-itemproperty", "sp", "export-csv", "export-clixml", "expand-archive",
+              "compress-archive", "icacls", "attrib", "takeown"}
+# Raw-text rules for idioms the token parser cannot see into (.NET calls, $env: expressions, cmd /c).
+_SECRETISH = r"\w*(?:secret|token|key|pass|pwd|cred|pat\b|conn)"
+RAW_RULES = [
+    (re.compile(r"(?im)(?:^|[;|&{(]\s*)[\"']?\$env:" + _SECRETISH), "deny",
+     "printing secret-looking environment variables is not allowed"),
+    (re.compile(r"(?i)\[(?:System\.)?Environment\]::GetEnvironmentVariables\b"), "deny",
+     "dumping environment variables can expose secrets"),
+    (re.compile(r"(?i)\[(?:System\.)?Environment\]::GetEnvironmentVariable\s*\(\s*[\"']" + _SECRETISH), "deny",
+     "reading a secret-looking environment variable is not allowed"),
+    (re.compile(r"(?i)\bcmd(?:\.exe)?\s+/[ck]\s+[\"']?\s*set\s*[\"']?(?:$|[\s;|&])"), "deny",
+     "dumping environment variables can expose secrets"),
+    (re.compile(r"(?i)ConsoleHost_history|HistorySavePath|\.(?:bash|zsh|sh|python|node_repl|psql|mysql)_history\b"), "deny",
+     "shell history often contains pasted secrets"),
+    (re.compile(r"(?i)GetNetworkCredential\s*\(|PtrToString(?:Auto|BSTR|Uni)|SecureStringToBSTR"), "deny",
+     "converting a credential or secure string to plain text exposes the secret"),
+    (re.compile(r"(?i)\bgit\b[^;|&\n]*\bconfig\b[^;|&\n]*\bcore\.hookspath\b"), "deny",
+     "changing core.hooksPath turns off the git hooks (the compliance gate)"),
+    (re.compile(r"(?i)\b(?:mysql|mariadb|mysqldump|mysqladmin)\b[^;|&\n]*\s-p[^\s-]\S*"), "deny",
+     "password on the command line (`-p<password>`); use `-p` alone or an option file"),
+    (re.compile(r"(?i)\bsshpass\b[^;|&\n]*\s-p\s*\S"), "deny", "password on the command line (`sshpass -p`)"),
+    (re.compile(r"(?i)\bdocker\b[^;|&\n]*\bcompose\b[^;|&\n]*\bconfig\b"), "deny",
+     "`docker compose config` prints the resolved environment, including secrets"),
+    (re.compile(r"(?i)\b(?:docker|podman)\s+exec\b[^;|&\n]*\s(?:env|printenv|set)(?:$|[\s;|&])"), "deny",
+     "reading the environment inside a container can expose secrets"),
+    (re.compile(r"(?i)\b(?:docker|podman)\s+(?:container\s+)?inspect\b"), "ask",
+     "`docker inspect` prints the container's environment, which may hold secrets; confirm"),
+]
 DB_CLIS = {"psql", "mysql", "mariadb", "sqlite3", "mongosh", "mongo", "redis-cli", "cqlsh", "clickhouse-client"}
 SECRET_VAR_RE = re.compile(r"\$\{?[A-Za-z_]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API_?KEY|ACCESS_KEY|PRIVATE_KEY|CREDENTIAL)[A-Za-z_]*\}?", re.I)
 DESTRUCTIVE_SQL = re.compile(r"(?is)\b(?:drop\s+(?:table|database|schema|user|role)|truncate\s+(?:table\s+)?\w|"
@@ -807,7 +839,8 @@ def path_rules(argv: List[str], redirect_targets: List[str], allow: Allowlist, p
             r = sensitive_path_reason(located)  # `cd secrets` earlier, then a plain file name
         if r and not allow.path_allowed(located) and c not in PATH_ONLY_CMDS:
             return "deny", f"`{c}` on '{a}' blocked: {r}. Use /safe-read to view it masked"
-        writes = (c in WRITER_CMDS or a in redirect_targets) and c not in {"cat", "head", "tail", "less"}
+        writes = (c in WRITER_CMDS or c.lower() in PS_WRITERS or a in redirect_targets) and \
+            c not in {"cat", "head", "tail", "less"}
         if writes and HARNESS_PROTECTED.search(located) and not (c in {"python", "python3"} and is_harness_tool(a, cwd, proj)):
             return "deny", f"modifying '{a}' is not allowed (harness files and git internals are human-owned)"
         if writes and asks is None and AUTORUN_FILES.search(located):
@@ -994,6 +1027,19 @@ def analyze(cmd: str, allow: Allowlist, proj: str, depth: int = 0, cwd: Optional
     return None
 
 
+def raw_rules(cmd: str) -> Verdict:
+    """Whole-text checks: a deny anywhere wins over an ask; .NET file reads of sensitive files are denied."""
+    found: Verdict = None
+    for rx, kind, reason in RAW_RULES:
+        if rx.search(cmd):
+            if kind == "deny":
+                return kind, reason
+            found = found or (kind, reason)
+    if re.search(r"(?i)::(?:Read|Open|Copy|Move)\w*\s*\(", cmd) and SENSITIVE_INLINE_RE.search(cmd):
+        return "deny", ".NET file call on a sensitive file; use /safe-read to view it masked"
+    return found
+
+
 def main(event):
     proj = project_dir(event)
     cmd = (event.get("tool_input") or {}).get("command") or ""
@@ -1009,7 +1055,8 @@ def main(event):
                if any(f.kind == "secret" for f in findings)
                else "Next step: leave the personal data out of the command (read it from a file or variable).")
         return deny(f"Command contains {summarize(findings)}. {fix} {UNBLOCK_HINT}")
-    v = analyze(cmd, allow, proj)
+    raw = raw_rules(cmd)
+    v = raw if raw and raw[0] == "deny" else (analyze(cmd, allow, proj) or raw)
     if v:
         kind, reason = v
         (deny if kind == "deny" else ask)(reason)

@@ -205,7 +205,8 @@ NEXT: <recommended next step or agent>
 - `secret.azure_storage_key`, `secret.azure_sas_token`, `secret.azure_client_secret`
 - `secret.vault_token`, `secret.terraform_cloud_token`, `secret.docker_auth`, `secret.bearer_token`
 - `secret.pypi_token`, `secret.twilio_key`, `secret.mailgun_key`, `secret.age_key`, `secret.grafana_token`
-- `secret.jwt`, `secret.connection_string`, `secret.generic_assignment`
+- `secret.jwt`, `secret.connection_string`, `secret.generic_assignment`, `secret.url_credential`
+- Prompts only: `secret.stated_in_prompt` ("the key is X", "set SIGNING_KEY to X"), `secret.random_string` (a bare generated value such as `openssl rand -base64 32` output)
 - `pii.email`, `pii.phone`, `pii.ssn`, `pii.sin`, `pii.credit_card`, `pii.iban`
 
 ## 🔀 Git policy

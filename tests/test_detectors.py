@@ -7,7 +7,7 @@ import unittest
 
 from helpers import FAKE, HOOKS, TOOLS, decision, spit, tmp_project
 from common import DEFAULT_CONFIG, scan_local
-from detectors import Allowlist, redact, scan_text, sensitive_path_reason
+from detectors import Allowlist, redact, scan_prompt_extra, scan_text, sensitive_path_reason
 
 
 def names(text, **kw):
@@ -172,6 +172,36 @@ class TestBalance(unittest.TestCase):
         for text in self.MUST_NOT_BLOCK_CLOUD:
             with self.subTest(text[:30]):
                 self.assertEqual([f.detector for f in self.local(text)], [])
+
+    _K = "Zq81mVx0Lp4Nc7Rt2Ws9" + "Yb6Hd3Kf5JgT7uW2qLm"
+    _B = "q7Zr2Lx9Vb4Nk1Wt8Hc3Pm6Yd0Gs5Fj" + "+Ra/Ue2Io7Ty4Xw=="
+    _PW = "Tr0ub4dor" + "&3xQ"
+
+    def prompt_hit(self, text):
+        return bool(self.local(text) or scan_prompt_extra(text))
+
+    def test_prompt_phrasings_block(self):
+        k, b, pw = self._K, self._B, self._PW
+        for text in (f"use this key SIGNING_KEY={k}", f"the signing key is {k}", b, f"use {b} for the api",
+                     f"set SIGNING_KEY to {k}", f"helm upgrade x --set secretEnv.SIGNING_KEY={k}",
+                     f"the db password is {pw}", f"my PAT is {k}", f"token - {k}",
+                     "hmac key: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"):
+            with self.subTest(text[:30]):
+                self.assertTrue(self.prompt_hit(text), text[:30])
+
+    def test_prompt_everyday_text_passes(self):
+        for text in ("fix the bug in src/components/UserAccountSettingsPanel.tsx",
+                     "commit 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b please revert",
+                     "image sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+                     "set SIGNING_KEY to the value from the vault", "the key is in Key Vault kv-prod-eastus2-001",
+                     "subscription id 3f2a8c1e-4b7d-4e9a-9c1f-2d3e4f5a6b7c", "SECRET_KEY=$SECRET_KEY_FROM_ENV",
+                     "use secretEnv.SIGNING_KEY.secretName=plx-devtools-secrets",
+                     "kubectl -n dev get pods plx-devtools-7d9f8b6c5-x2k4q", "the password policy requires 12 chars",
+                     "token: ${{ secrets.GITHUB_TOKEN }}", "the token expires in 3600 seconds",
+                     "password is in $DB_PASSWORD", "token library version is 4.2.1-beta3",
+                     "/subscriptions/3f2a8c1e-4b7d-4e9a-9c1f-2d3e4f5a6b7c/resourceGroups/rg-Prod01/providers/Microsoft.Network"):
+            with self.subTest(text[:30]):
+                self.assertFalse(self.prompt_hit(text), text[:30])
 
     def test_infra_credential_files_are_sensitive(self):
         for p in ("terraform.tfvars", "envs/prod/prod.auto.tfvars", "kubeconfig", "clusters/aks.kubeconfig",
