@@ -17,8 +17,14 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 - Credentials in URL query strings (`?api_key=`, `&access_token=`, `&password=`) block in web fetches, commands and files.
 - More PowerShell and command-line rules: a bare `$env:SECRET` expression, `[Environment]::GetEnvironmentVariables()`, `[IO.File]::ReadAllText` on a sensitive file, `cmd /c set`, PowerShell and shell history files, `GetNetworkCredential()` and secure-string-to-text calls, `mysql -p<password>`, `sshpass -p`, `docker compose config` and `docker exec … env` are denied; `git config core.hooksPath` is denied (it asked before); `docker inspect` asks.
 
+- Scripts are checked when they run: `bash x.sh`, `./x.sh`, `source x.sh` and `.ps1` files get the same checks as the commands inside them, so writing a script first no longer gets around the guard. A Python, Node, Ruby or Perl script that reads a sensitive file or prints the whole environment asks.
+- `grep -r` and `rg --hidden/-u` are denied when the search would walk into `.env`, keys or other sensitive files; `--exclude` or the Grep tool get past it. Brace patterns such as `cat .{env,x}` are expanded before the path check.
+- `Get-Content Env:…` and other reads of the PowerShell `Env:` drive are denied. Sending a secret variable over the network (`curl -d "$API_KEY"`, `irm -Body $env:TOKEN`) and reading files named by a runtime listing (`head $(ls -a | grep env)`) ask.
+
 ### Fixed
 
+- The `ConsoleHost_history.txt` pattern never matched on Linux and macOS, where file name matching is case-sensitive.
+- `--exclude=.env` was read as a request to open `.env`.
 - `NAME=value` secrets were only caught at the start of a line, so `use this key SIGNING_KEY=…` or `--set secretEnv.SIGNING_KEY=…` got through. They are now caught anywhere in a line.
 - PowerShell cmdlets that write files (`Set-Content`, `Add-Content`, `Out-File`, `New-Item`, `Copy-Item`, `Move-Item` and their aliases) could change harness files and `.git/hooks`. They are now denied like `cp`, `mv` and `>`.
 - The installer no longer crashes when the project is on a different Windows drive, and no longer rewrites an unchanged `settings.json`.

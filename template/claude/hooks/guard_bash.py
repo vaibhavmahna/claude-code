@@ -72,6 +72,15 @@ _SECRETISH = r"\w*(?:secret|token|key|pass|pwd|cred|pat\b|conn)"
 RAW_RULES = [
     (re.compile(r"(?im)(?:^|[;|&{(]\s*)[\"']?\$env:" + _SECRETISH), "deny",
      "printing secret-looking environment variables is not allowed"),
+    (re.compile(r"(?i)(?:^|[\s(;|])(?:get-content|gc|type|cat|get-item|gi|get-childitem|gci|dir|ls|"
+                r"select-string|sls)\s+(?:-\w+\s+)*[\"']?env:"), "deny",
+     "reading the Env: drive can expose secrets"),
+    (re.compile(r"(?i)\b(?:curl|wget|http|https|nc|ncat|invoke-restmethod|irm|invoke-webrequest|iwr)\b[^;|&\n]*"
+                r"(?:\$\{?\w*(?:TOKEN|SECRET|PASSWORD|PASSWD|API_?KEY|ACCESS_KEY|PRIVATE_KEY|CREDENTIAL)\w*\}?|"
+                r"\$env:" + _SECRETISH + r")"), "ask",
+     "this sends a secret environment variable over the network; confirm the destination is the service it belongs to"),
+    (re.compile(r"(?i)\b(?:head|tail|cat|less|more|grep|xargs\s+cat)\b[^;|&\n]*\$\(\s*(?:ls|find|fd|git\s+ls-files)\b"),
+     "ask", "file names come from a listing at run time and cannot be checked; confirm"),
     (re.compile(r"(?i)\[(?:System\.)?Environment\]::GetEnvironmentVariables\b"), "deny",
      "dumping environment variables can expose secrets"),
     (re.compile(r"(?i)\[(?:System\.)?Environment\]::GetEnvironmentVariable\s*\(\s*[\"']" + _SECRETISH), "deny",
@@ -830,6 +839,8 @@ def path_rules(argv: List[str], redirect_targets: List[str], allow: Allowlist, p
     asks: Verdict = None
     for a in ([] if harness_tool else args) + redirect_targets:
         if a.startswith("-") and "=" in a:
+            if re.match(r"^--(?:exclude|exclude-dir|ignore|ignore-file)=", a):
+                continue  # `grep -r --exclude=.env`: names a file to skip, not one to read
             a = a.split("=", 1)[1]
         if not a or a.startswith("-"):
             continue
@@ -899,6 +910,117 @@ def heredoc_feeds_harness_tool(header: str, cwd: str, proj: str) -> bool:
     return False
 
 
+def brace_expand(word: str) -> List[str]:
+    """Bash brace expansion for the simple `{a,b}` form, so `.{env,x}` is checked as `.env` and `.x`."""
+    m = re.search(r"\{([^{}]*,[^{}]*)\}", word)
+    if not m:
+        return [word]
+    out: List[str] = []
+    for alt in m.group(1).split(","):
+        out += brace_expand(word[:m.start()] + alt + word[m.end():])
+        if len(out) > 64:
+            break
+    return out
+
+
+SCRIPT_RUNNERS = {"python": "py", "python3": "py", "node": "js", "ruby": "rb", "perl": "pl", "php": "php",
+                  "deno": "js", "bun": "js", "pwsh": "ps", "powershell": "ps"}
+
+
+def _script_text(path: str) -> Optional[str]:
+    try:
+        if os.path.isfile(path) and os.path.getsize(path) <= 256 * 1024:
+            with open(path, encoding="utf-8", errors="replace") as fh:
+                return fh.read()
+    except OSError:
+        pass
+    return None
+
+
+def script_rules(argv: List[str], allow: Allowlist, proj: str, depth: int, cwd: str) -> Verdict:
+    """A script written earlier and run now gets the same checks as the command would: `bash x.sh`, `./x.sh`,
+    `source x.sh`, `python3 dump.py`, `pwsh -File x.ps1`."""
+    run_path, args = argv[0], argv[1:]
+    c = os.path.basename(run_path)
+    script, kind = None, None
+    if c in SHELLS | {"source", "."}:
+        if c in SHELLS and any(a == "-c" or (a.startswith("-") and "c" in a[1:] and not a.startswith("--")) for a in args):
+            return None  # inline code: handled by shell_code()
+        script, kind = next((a for a in args if not a.startswith("-")), None), "sh"
+    elif c.lower() in SCRIPT_RUNNERS:
+        if any(a in {"-c", "-e", "-r", "-p", "--eval", "--print", "-m", "-Command", "-command", "-EncodedCommand"}
+               for a in args):
+            return None
+        rest = [a for a in args if not a.startswith("-")]
+        script, kind = (rest[0] if rest else None), SCRIPT_RUNNERS[c.lower()]
+    elif ("/" in run_path or c.endswith((".sh", ".ps1"))) and not c.startswith("-"):
+        loc = locate(run_path, cwd, proj)
+        if os.path.isabs(loc) and not c.endswith((".sh", ".ps1")):
+            return None  # /bin/cat and other programs outside the project
+        script, kind = run_path, "sh"
+    if not script or is_harness_tool(script, cwd, proj):
+        return None
+    path = os.path.join(proj, cwd or "", os.path.expanduser(script))
+    text = _script_text(os.path.normpath(path))
+    if not text or "\x00" in text:
+        return None  # missing, too big, or a binary
+    name = os.path.basename(script)
+    if kind == "sh" and not name.endswith(".ps1"):
+        if text.startswith("#!") and not re.match(r"#!.*\b(?:ba|z|k|da)?sh\b", text.split("\n", 1)[0]):
+            kind = "other"
+        else:
+            v = analyze(text, allow, proj, depth + 1, cwd)
+            return (v[0], f"script `{name}`: {v[1]}") if v else None
+    if kind == "ps" or name.endswith(".ps1"):
+        v = raw_rules(text) or analyze(text, allow, proj, depth + 1, cwd)
+        return (v[0], f"script `{name}`: {v[1]}") if v else None
+    if SENSITIVE_INLINE_RE.search(text):
+        return "ask", (f"script `{name}` reads a sensitive file ({SENSITIVE_INLINE_RE.search(text).group(0)}); "
+                       "confirm it is the app's own config loading, not a dump")
+    if re.search(r"os\.environ\b(?!\s*[\[.(]\s*(?:get\b)?)|process\.env\b(?!\s*[.\[])|\bENV\.to_h\b|%ENV\b", text) and \
+            re.search(r"print|console\.log|puts|write|send|post|request", text):
+        return "ask", f"script `{name}` may print or send the whole environment; confirm"
+    return None
+
+
+# grep that walks hidden files reads .env and keys; ripgrep only when told to search hidden/ignored files.
+def search_rules(argv: List[str], cwd: str, proj: str) -> Verdict:
+    c, args = argv[0], argv[1:]
+    flags = [a for a in args if a.startswith("-")]
+    if c in {"grep", "egrep", "fgrep"}:
+        recursive = any(a in {"--recursive", "--dereference-recursive"} or
+                        (not a.startswith("--") and re.search(r"[rR]", a[1:])) for a in flags)
+    elif c in {"rg", "ag"}:
+        recursive = any(a in {"--hidden", "--no-ignore", "-u", "-uu", "-uuu", "--unrestricted", "-a", "--all-types"}
+                        for a in flags)
+    else:
+        return None
+    if not recursive:
+        return None
+    excluded = " ".join(a for a in args if "exclude" in a or a.startswith("-g") or a.startswith("--glob"))
+    if re.search(r"\.env|secret|\*\.\w", excluded):
+        return None  # the user already excluded the sensitive files
+    positional = [a for a in args if not a.startswith("-")]
+    roots = positional[1:] or ["."]
+    seen = 0
+    for root in roots:
+        top = os.path.normpath(os.path.join(proj, cwd or "", os.path.expanduser(root)))
+        if os.path.isfile(top):
+            continue
+        for dirpath, dirs, files in os.walk(top):
+            dirs[:] = [d for d in dirs if d not in {".git", "node_modules", ".venv", "venv", "__pycache__", ".terraform"}]
+            for fn in files:
+                seen += 1
+                full = os.path.join(dirpath, fn)
+                rel = os.path.relpath(full, proj).replace(os.sep, "/")
+                if sensitive_path_reason(rel) and not _CTX["allow"].path_allowed(rel):
+                    return "deny", (f"`{c}` would search '{rel}' ({sensitive_path_reason(rel)}). Use the Grep tool, "
+                                    "which skips and masks secrets, or add `--exclude` for that file")
+                if seen > 5000:
+                    return None
+    return None
+
+
 def analyze(cmd: str, allow: Allowlist, proj: str, depth: int = 0, cwd: Optional[str] = None) -> Verdict:
     if depth > 6:
         return "deny", "command nesting too deep to verify"
@@ -959,10 +1081,12 @@ def analyze(cmd: str, allow: Allowlist, proj: str, depth: int = 0, cwd: Optional
         argv = [expand_vars(t, env) for t in argv]
         redirect_targets = [expand_vars(t, env) for t in redirect_targets]
         writes = [expand_vars(t, env) for t in writes]
+        pre = argv
         argv = unwrap(argv)
         if not argv:
             continue
         c = argv[0]
+        run_path = pre[len(pre) - len(argv)]  # argv[0] before unwrap() reduced it to a base name: `./x.sh`
         if c in {"export", "local", "readonly", "declare", "typeset"}:
             for t in argv[1:]:
                 m = ASSIGN_RE.match(t)
@@ -1000,6 +1124,11 @@ def analyze(cmd: str, allow: Allowlist, proj: str, depth: int = 0, cwd: Optional
                 if v:
                     verdicts.append(v)
         _CTX["solo"] = solo
+        v = script_rules([run_path] + argv[1:], allow, proj, depth, cwd) or search_rules(argv, cwd, proj)
+        if v:
+            verdicts.append(v)
+        if any("{" in a and "," in a for a in argv[1:]):  # `cat .{env,x}`: check what the braces expand to
+            argv = [argv[0]] + [x for a in argv[1:] for x in brace_expand(a)]
         v = cmd_rules(argv)
         if v:
             verdicts.append(v)

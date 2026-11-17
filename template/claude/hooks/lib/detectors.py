@@ -473,7 +473,7 @@ SENSITIVE_NAME_GLOBS = [
     ".dockercfg", ".dockerconfigjson", "*.dockerconfigjson", "*.ovpn", ".s3cfg", ".boto",
     "local.settings.json", "*-credentials.json", "*_credentials.json", "*-key.json", "*_key.json",
     "*-secrets.y*ml", "*_secrets.y*ml", "*.secrets.y*ml", "environ",
-    ".ConsoleHost_history.txt", "ConsoleHost_history.txt",
+    ".consolehost_history.txt", "consolehost_history.txt",
 ]
 SENSITIVE_NAME_EXCEPTIONS = [
     "*.example", "*.sample", "*.template", "*.dist", "*.tmpl", ".env.*example*", "*.pub", "*.md",
